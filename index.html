@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>멀티 타이머</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f13;
+      --surface: #1a1a24;
+      --surface2: #22222f;
+      --border: #2a2a38;
+      --accent: #7c6cfc;
+      --accent2: #fc6c8f;
+      --text: #e8e8f0;
+      --muted: #6b6b88;
+      --danger: #fc6c6c;
+      --success: #6cfca8;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 28px 16px 60px;
+    }
+
+    /* ── Header ── */
+    header { text-align: center; margin-bottom: 28px; }
+    header h1 {
+      font-size: 2rem; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      letter-spacing: -0.5px;
+    }
+    header p { color: var(--muted); margin-top: 6px; font-size: 0.875rem; }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 9px 18px; border: none; border-radius: 10px; cursor: pointer;
+      font-size: 0.85rem; font-weight: 600; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), #5a4ce0); color: #fff; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-edit-active { background: rgba(124,108,252,0.15); color: var(--accent); border: 1px solid var(--accent); }
+    .btn-danger-ghost { background: transparent; color: var(--danger); border: 1px solid transparent; }
+    .btn-danger-ghost:hover { border-color: var(--danger); background: rgba(252,108,108,0.08); }
+    .btn-sm { padding: 5px 12px; font-size: 0.78rem; border-radius: 8px; }
+    .btn-xs { padding: 4px 10px; font-size: 0.72rem; border-radius: 7px; }
+
+    /* ── Preset section ── */
+    .preset-section {
+      max-width: 1100px; margin: 0 auto 32px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+    }
+    .preset-section.edit-mode { border-color: var(--accent); }
+
+    .preset-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; user-select: none;
+    }
+    .preset-header-left {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; font-size: 0.9rem; cursor: pointer; flex: 1;
+    }
+    .preset-header-left:hover { color: var(--accent); }
+    .preset-header-left .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      flex-shrink: 0;
+    }
+    .preset-header-right { display: flex; align-items: center; gap: 8px; }
+    .preset-chevron { color: var(--muted); transition: transform 0.2s; }
+    .preset-section.open .preset-chevron { transform: rotate(180deg); }
+
+    .preset-body { display: none; padding: 0 16px 16px; }
+    .preset-section.open .preset-body { display: block; }
+
+    .preset-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px; margin-bottom: 12px; padding-top: 4px;
+    }
+    .preset-categories { display: flex; gap: 6px; flex-wrap: wrap; }
+    .cat-btn {
+      padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .cat-btn:hover, .cat-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(124,108,252,0.08); }
+
+    .edit-mode-hint {
+      font-size: 0.75rem; color: var(--accent); font-weight: 500;
+      display: none; align-items: center; gap: 5px;
+    }
+    .preset-section.edit-mode .edit-mode-hint { display: flex; }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+      gap: 10px;
+    }
+
+    /* Normal preset card */
+    .preset-card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+      padding: 14px 14px 12px; cursor: pointer; transition: all 0.15s;
+      position: relative; overflow: hidden;
+    }
+    .preset-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .preset-card:hover::before { opacity: 0.07; }
+    .preset-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .preset-card:active { transform: scale(0.97); }
+    .preset-card > * { position: relative; }
+
+    .preset-emoji { font-size: 1.5rem; margin-bottom: 6px; display: block; }
+    .preset-name { font-size: 0.82rem; font-weight: 600; color: var(--text); line-height: 1.3; margin-bottom: 4px; }
+    .preset-time { font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    .preset-launch {
+      position: absolute; top: 10px; right: 10px;
+      width: 22px; height: 22px;
+      background: linear-gradient(135deg, var(--accent), #5a4ce0);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .preset-card:hover .preset-launch { opacity: 1; }
+
+    /* Edit-mode overlays on preset cards */
+    .preset-section.edit-mode .preset-card { cursor: default; }
+    .preset-section.edit-mode .preset-card:hover { transform: none; }
+    .preset-section.edit-mode .preset-card:hover::before { opacity: 0; }
+    .preset-section.edit-mode .preset-card:hover { border-color: var(--border); }
+    .preset-section.edit-mode .preset-launch { display: none; }
+
+    .preset-card-actions {
+      display: none;
+      position: absolute; top: 8px; right: 8px;
+      flex-direction: column; gap: 4px;
+    }
+    .preset-section.edit-mode .preset-card-actions { display: flex; }
+
+    .pc-action-btn {
+      width: 26px; height: 26px; border-radius: 8px; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .pc-edit-btn { background: rgba(124,108,252,0.18); color: var(--accent); }
+    .pc-edit-btn:hover { background: rgba(124,108,252,0.35); }
+    .pc-del-btn { background: rgba(252,108,108,0.15); color: var(--danger); }
+    .pc-del-btn:hover { background: rgba(252,108,108,0.3); }
+
+    /* custom badge */
+    .preset-custom-badge {
+      position: absolute; bottom: 8px; right: 8px;
+      background: rgba(124,108,252,0.18); color: var(--accent);
+      font-size: 0.6rem; font-weight: 700; padding: 1px 6px; border-radius: 99px;
+      letter-spacing: 0.04em; display: none;
+    }
+    .preset-section.edit-mode .preset-custom-badge { display: block; }
+
+    /* Add new card */
+    .preset-add-card {
+      background: transparent; border: 2px dashed var(--border); border-radius: 14px;
+      padding: 14px 14px 12px; cursor: pointer; transition: all 0.15s;
+      display: none; align-items: center; justify-content: center; flex-direction: column;
+      gap: 6px; color: var(--muted); font-size: 0.82rem; font-weight: 600; min-height: 90px;
+    }
+    .preset-section.edit-mode .preset-add-card { display: flex; }
+    .preset-add-card:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Reset defaults button */
+    .reset-defaults-btn {
+      display: none; background: transparent; border: none; cursor: pointer;
+      color: var(--muted); font-size: 0.75rem; text-decoration: underline; padding: 2px;
+    }
+    .preset-section.edit-mode .reset-defaults-btn { display: inline; }
+    .reset-defaults-btn:hover { color: var(--danger); }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .modal-backdrop.show { opacity: 1; pointer-events: all; }
+
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+      padding: 28px; width: 100%; max-width: 420px; margin: 16px;
+      transform: translateY(16px) scale(0.97);
+      transition: transform 0.2s;
+    }
+    .modal-backdrop.show .modal { transform: translateY(0) scale(1); }
+
+    .modal-title {
+      font-size: 1.05rem; font-weight: 700; margin-bottom: 22px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .modal-title svg { color: var(--accent); }
+
+    .modal-field { margin-bottom: 16px; }
+    .modal-field label {
+      display: block; font-size: 0.75rem; font-weight: 600; color: var(--muted);
+      margin-bottom: 7px; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .modal-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 13px; color: var(--text); font-size: 0.92rem;
+      outline: none; transition: border-color 0.15s; font-family: inherit;
+    }
+    .modal-input:focus { border-color: var(--accent); }
+
+    .emoji-row { display: flex; gap: 10px; align-items: center; }
+    .emoji-preview {
+      width: 50px; height: 50px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; flex-shrink: 0;
+    }
+
+    .time-inputs { display: flex; gap: 8px; }
+    .time-inputs .time-field { flex: 1; }
+    .time-inputs .time-field label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 5px; }
+    .time-inputs .time-field input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 9px; padding: 9px 4px; color: var(--text); font-size: 1rem; font-weight: 600;
+      text-align: center; outline: none; font-variant-numeric: tabular-nums;
+    }
+    .time-inputs .time-field input:focus { border-color: var(--accent); }
+
+    .modal-select {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px 13px; color: var(--text); font-size: 0.92rem;
+      outline: none; cursor: pointer; font-family: inherit;
+    }
+    .modal-select:focus { border-color: var(--accent); }
+
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+    .modal-actions .btn { flex: 1; justify-content: center; }
+    .btn-modal-save { background: linear-gradient(135deg, var(--accent), #5a4ce0); color: #fff; }
+    .btn-modal-cancel { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+    .btn-modal-cancel:hover { border-color: var(--border); color: var(--text); }
+
+    /* ── Controls bar ── */
+    .controls-bar {
+      display: flex; justify-content: center; gap: 10px;
+      margin: 0 auto 24px; flex-wrap: wrap; max-width: 1100px;
+    }
+
+    /* ── Timer grid ── */
+    .timers-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 18px; max-width: 1100px; margin: 0 auto;
+    }
+    .timer-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+      padding: 22px; position: relative; transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .timer-card.running { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 24px rgba(124,108,252,0.15); }
+    .timer-card.finished { border-color: var(--success); box-shadow: 0 0 0 1px var(--success), 0 4px 24px rgba(108,252,168,0.15); animation: pulse-finish 1s ease-in-out infinite; }
+    @keyframes pulse-finish {
+      0%,100% { box-shadow: 0 0 0 1px var(--success), 0 4px 24px rgba(108,252,168,0.15); }
+      50%      { box-shadow: 0 0 0 3px var(--success), 0 4px 36px rgba(108,252,168,0.35); }
+    }
+    .timer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .timer-label {
+      font-size: 0.82rem; font-weight: 600; background: none; border: none; outline: none;
+      color: var(--muted); cursor: text; width: 150px; letter-spacing: 0.04em;
+    }
+    .timer-label:focus { color: var(--text); border-bottom: 1px solid var(--accent); }
+
+    .ring-wrapper { display: flex; justify-content: center; align-items: center; margin: 4px 0 18px; position: relative; }
+    .ring-wrapper svg { transform: rotate(-90deg); }
+    .ring-bg { stroke: var(--border); fill: none; }
+    .ring-progress { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.5s linear, stroke 0.3s; }
+    .timer-card.finished .ring-progress { stroke: var(--success); }
+    .ring-center { position: absolute; text-align: center; pointer-events: none; }
+    .time-display { font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1; }
+    .timer-card.finished .time-display { color: var(--success); }
+    .time-status { font-size: 0.72rem; color: var(--muted); margin-top: 5px; height: 14px; }
+
+    .input-row { display: flex; gap: 6px; margin-bottom: 14px; }
+    .time-field { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .time-field label { font-size: 0.62rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .time-field input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 4px; color: var(--text); font-size: 1.05rem; font-weight: 600; text-align: center;
+      outline: none; font-variant-numeric: tabular-nums; transition: border-color 0.15s;
+    }
+    .time-field input:focus { border-color: var(--accent); }
+    .time-field input:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .action-row { display: flex; gap: 7px; }
+    .action-row .btn { flex: 1; justify-content: center; }
+    .start-btn { background: linear-gradient(135deg, var(--accent), #5a4ce0); color: #fff; }
+    .pause-btn { background: var(--bg); border: 1px solid var(--border); color: var(--text); }
+    .reset-btn { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+
+    .finished-badge {
+      display: none; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      background: var(--success); color: #0a2e1a; font-size: 0.68rem; font-weight: 700;
+      padding: 2px 10px; border-radius: 99px; letter-spacing: 0.06em; white-space: nowrap;
+    }
+    .timer-card.finished .finished-badge { display: block; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); grid-column: 1 / -1; }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; background: var(--surface);
+      border: 1px solid var(--success); color: var(--text); padding: 12px 18px;
+      border-radius: 12px; font-size: 0.85rem; font-weight: 500; opacity: 0;
+      transform: translateY(10px); transition: all 0.25s; pointer-events: none; z-index: 998; max-width: 260px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+
+    .section-label {
+      max-width: 1100px; margin: 0 auto 14px;
+      display: flex; align-items: center; gap: 10px;
+      color: var(--muted); font-size: 0.78rem; font-weight: 600;
+      letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    @media (max-width: 520px) {
+      .timers-grid { grid-template-columns: 1fr; }
+      .time-display { font-size: 1.9rem; }
+      .preset-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>멀티 타이머</h1>
+  <p>프리셋을 클릭하거나 직접 시간을 설정하세요</p>
+</header>
+
+<!-- Preset Section -->
+<div class="preset-section open" id="preset-section">
+  <div class="preset-header">
+    <div class="preset-header-left" onclick="togglePresets()">
+      <span class="dot"></span>
+      빠른 프리셋
+      <svg class="preset-chevron" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="6,9 12,15 18,9"/>
+      </svg>
+    </div>
+    <div class="preset-header-right">
+      <span class="reset-defaults-btn" onclick="confirmResetDefaults()">기본값으로 초기화</span>
+      <button class="btn btn-sm btn-ghost" id="edit-toggle-btn" onclick="toggleEditMode()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        편집
+      </button>
+    </div>
+  </div>
+
+  <div class="preset-body">
+    <div class="preset-toolbar">
+      <div class="preset-categories" id="cat-tabs">
+        <button class="cat-btn active" onclick="filterCat('all', this)">전체</button>
+        <button class="cat-btn" onclick="filterCat('work', this)">업무·집중</button>
+        <button class="cat-btn" onclick="filterCat('cook', this)">요리</button>
+        <button class="cat-btn" onclick="filterCat('health', this)">건강·운동</button>
+        <button class="cat-btn" onclick="filterCat('daily', this)">일상</button>
+        <button class="cat-btn" onclick="filterCat('custom', this)">내 프리셋</button>
+      </div>
+      <div class="edit-mode-hint">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        카드의 버튼으로 편집/삭제
+      </div>
+    </div>
+    <div class="preset-grid" id="preset-grid"></div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls-bar">
+  <button class="btn btn-primary" onclick="addTimer()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+    타이머 추가
+  </button>
+  <button class="btn btn-ghost" onclick="startAll()">모두 시작</button>
+  <button class="btn btn-ghost" onclick="pauseAll()">모두 일시정지</button>
+  <button class="btn btn-ghost" onclick="resetAll()">모두 초기화</button>
+</div>
+
+<div class="section-label">내 타이머</div>
+
+<div class="timers-grid" id="timers-grid">
+  <div class="empty-state" id="empty-state">
+    <div class="icon">⏱</div>
+    <p>위 프리셋을 클릭하거나 타이머를 직접 추가하세요</p>
+  </div>
+</div>
+
+<!-- Preset Edit Modal -->
+<div class="modal-backdrop" id="modal-backdrop" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <div class="modal-title">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      <span id="modal-title-text">프리셋 편집</span>
+    </div>
+
+    <div class="modal-field">
+      <label>이모지 & 이름</label>
+      <div class="emoji-row">
+        <div class="emoji-preview" id="emoji-preview">🍅</div>
+        <input class="modal-input" id="inp-emoji" maxlength="4" placeholder="이모지"
+          style="width:72px;text-align:center;font-size:1.4rem;padding:8px 4px;flex-shrink:0"
+          oninput="document.getElementById('emoji-preview').textContent=this.value||'⏱'">
+        <input class="modal-input" id="inp-name" placeholder="프리셋 이름" style="flex:1">
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label>시간 설정</label>
+      <div class="time-inputs">
+        <div class="time-field"><label>시간</label><input type="number" id="inp-mh" min="0" max="23" value="0" placeholder="0"></div>
+        <div class="time-field"><label>분</label><input type="number" id="inp-mm" min="0" max="59" value="5" placeholder="0"></div>
+        <div class="time-field"><label>초</label><input type="number" id="inp-ms" min="0" max="59" value="0" placeholder="0"></div>
+      </div>
+    </div>
+
+    <div class="modal-field">
+      <label>카테고리</label>
+      <select class="modal-select" id="inp-cat">
+        <option value="work">업무·집중</option>
+        <option value="cook">요리</option>
+        <option value="health">건강·운동</option>
+        <option value="daily">일상</option>
+        <option value="custom">내 프리셋</option>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>설명 <span style="font-weight:400;text-transform:none;font-size:0.7rem">(선택 — 비우면 시간으로 자동 생성)</span></label>
+      <input class="modal-input" id="inp-desc" placeholder="예: 25분 집중 작업">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-modal-cancel" onclick="closeModal()">취소</button>
+      <button class="btn btn-modal-save" onclick="savePreset()">저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  /* ──────────── Default presets ──────────── */
+  const DEFAULT_PRESETS = [
+    { emoji:'🍅', name:'뽀모도로',    desc:'25분 집중',   cat:'work',   h:0, m:25, s:0,  custom:false },
+    { emoji:'☕', name:'짧은 휴식',   desc:'5분 휴식',    cat:'work',   h:0, m:5,  s:0,  custom:false },
+    { emoji:'🛋️', name:'긴 휴식',     desc:'15분 휴식',   cat:'work',   h:0, m:15, s:0,  custom:false },
+    { emoji:'📖', name:'독서 집중',   desc:'45분',        cat:'work',   h:0, m:45, s:0,  custom:false },
+    { emoji:'💡', name:'딥 워크',     desc:'90분 몰입',   cat:'work',   h:1, m:30, s:0,  custom:false },
+    { emoji:'🥚', name:'반숙 달걀',   desc:'7분',         cat:'cook',   h:0, m:7,  s:0,  custom:false },
+    { emoji:'🍳', name:'완숙 달걀',   desc:'12분',        cat:'cook',   h:0, m:12, s:0,  custom:false },
+    { emoji:'🍜', name:'라면',        desc:'3분 30초',    cat:'cook',   h:0, m:3,  s:30, custom:false },
+    { emoji:'🍚', name:'밥 뜸들이기', desc:'10분',        cat:'cook',   h:0, m:10, s:0,  custom:false },
+    { emoji:'🫖', name:'녹차 우리기', desc:'2분',         cat:'cook',   h:0, m:2,  s:0,  custom:false },
+    { emoji:'🏃', name:'러닝 준비',   desc:'5분 워밍업',  cat:'health', h:0, m:5,  s:0,  custom:false },
+    { emoji:'🧘', name:'명상',        desc:'10분',        cat:'health', h:0, m:10, s:0,  custom:false },
+    { emoji:'🏋️', name:'세트 쉬기',   desc:'90초 휴식',   cat:'health', h:0, m:1,  s:30, custom:false },
+    { emoji:'🚶', name:'산책',        desc:'30분',        cat:'health', h:0, m:30, s:0,  custom:false },
+    { emoji:'😴', name:'낮잠',        desc:'20분 파워냅', cat:'daily',  h:0, m:20, s:0,  custom:false },
+    { emoji:'💧', name:'물 마시기',   desc:'1시간마다',   cat:'daily',  h:1, m:0,  s:0,  custom:false },
+    { emoji:'👁️', name:'눈 휴식',     desc:'20분마다',    cat:'daily',  h:0, m:20, s:0,  custom:false },
+    { emoji:'🧹', name:'빠른 정리',   desc:'15분 청소',   cat:'daily',  h:0, m:15, s:0,  custom:false },
+  ];
+
+  /* ──────────── State ──────────── */
+  const LS_KEY = 'mt_presets_v1';
+  let presets = loadPresets();
+  let editMode = false;
+  let activeCat = 'all';
+  let editingIdx = null; // null = new, number = editing
+
+  let timers = [];
+  let nextId = 1;
+  const RADIUS = 54;
+  const CIRC = 2 * Math.PI * RADIUS;
+
+  /* ──────────── Persistence ──────────── */
+  function loadPresets() {
+    try {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_PRESETS.map(p => ({ ...p }));
+  }
+
+  function savePresetsToStorage() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(presets)); } catch {}
+  }
+
+  /* ──────────── Audio ──────────── */
+  let audioCtx = null;
+  function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+  function playBeep(times = 3) {
+    try {
+      const ctx = getAudio();
+      for (let i = 0; i < times; i++) {
+        const osc = ctx.createOscillator(), gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine'; osc.frequency.value = 880;
+        const t = ctx.currentTime + i * 0.38;
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.4, t + 0.05);
+        gain.gain.linearRampToValueAtTime(0, t + 0.28);
+        osc.start(t); osc.stop(t + 0.3);
+      }
+    } catch {}
+  }
+
+  /* ──────────── Toast ──────────── */
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(el._tid);
+    el._tid = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  /* ──────────── Preset section ──────────── */
+  function togglePresets() {
+    document.getElementById('preset-section').classList.toggle('open');
+  }
+
+  function toggleEditMode() {
+    editMode = !editMode;
+    const section = document.getElementById('preset-section');
+    const btn = document.getElementById('edit-toggle-btn');
+    section.classList.toggle('edit-mode', editMode);
+    if (editMode) {
+      btn.classList.remove('btn-ghost');
+      btn.classList.add('btn-edit-active');
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20,6 9,17 4,12"/></svg> 완료`;
+      if (!document.getElementById('preset-section').classList.contains('open')) togglePresets();
+    } else {
+      btn.classList.add('btn-ghost');
+      btn.classList.remove('btn-edit-active');
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 편집`;
+    }
+    renderPresets();
+  }
+
+  function filterCat(cat, btn) {
+    activeCat = cat;
+    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderPresets();
+  }
+
+  function makeTimeDesc(h, m, s) {
+    const parts = [];
+    if (h) parts.push(`${h}시간`);
+    if (m) parts.push(`${m}분`);
+    if (s) parts.push(`${s}초`);
+    return parts.join(' ') || '0초';
+  }
+
+  function renderPresets() {
+    const grid = document.getElementById('preset-grid');
+    const filtered = activeCat === 'all'
+      ? presets
+      : presets.filter(p => p.cat === activeCat);
+
+    let html = filtered.map((p, fi) => {
+      const realIdx = presets.indexOf(p);
+      const customBadge = p.custom ? '<div class="preset-custom-badge">커스텀</div>' : '';
+      return `
+        <div class="preset-card" onclick="${editMode ? '' : `launchPreset(${realIdx})`}"
+          title="${escHtml(p.name)} — ${escHtml(p.desc || makeTimeDesc(p.h, p.m, p.s))}${editMode ? '' : ' (클릭하면 바로 시작)'}">
+          <span class="preset-emoji">${p.emoji}</span>
+          <div class="preset-name">${escHtml(p.name)}</div>
+          <div class="preset-time">${escHtml(p.desc || makeTimeDesc(p.h, p.m, p.s))}</div>
+          <div class="preset-launch">
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+          </div>
+          <div class="preset-card-actions">
+            <button class="pc-action-btn pc-edit-btn" onclick="event.stopPropagation();openEditModal(${realIdx})" title="편집">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="pc-action-btn pc-del-btn" onclick="event.stopPropagation();deletePreset(${realIdx})" title="삭제">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="3,6 5,6 21,6"/><path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/>
+                <path d="M10,11v6"/><path d="M14,11v6"/><path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1V6"/>
+              </svg>
+            </button>
+          </div>
+          ${customBadge}
+        </div>
+      `;
+    }).join('');
+
+    // "새 프리셋 추가" card — shown in edit mode only
+    html += `
+      <div class="preset-add-card" onclick="openNewModal()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        새 프리셋 추가
+      </div>
+    `;
+
+    grid.innerHTML = html;
+  }
+
+  function launchPreset(idx) {
+    const p = presets[idx];
+    const id = addTimer({ label: p.emoji + ' ' + p.name, h: p.h, m: p.m, s: p.s });
+    startTimer(id);
+    showToast(`${p.emoji} ${p.name} 시작!`);
+    setTimeout(() => {
+      const card = document.getElementById(`card-${id}`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
+  }
+
+  /* ──────────── Preset CRUD ──────────── */
+  function openNewModal() {
+    editingIdx = null;
+    document.getElementById('modal-title-text').textContent = '새 프리셋 추가';
+    document.getElementById('inp-emoji').value = '';
+    document.getElementById('emoji-preview').textContent = '⏱';
+    document.getElementById('inp-name').value = '';
+    document.getElementById('inp-mh').value = 0;
+    document.getElementById('inp-mm').value = 5;
+    document.getElementById('inp-ms').value = 0;
+    document.getElementById('inp-cat').value = 'custom';
+    document.getElementById('inp-desc').value = '';
+    showModal();
+    setTimeout(() => document.getElementById('inp-emoji').focus(), 200);
+  }
+
+  function openEditModal(idx) {
+    editingIdx = idx;
+    const p = presets[idx];
+    document.getElementById('modal-title-text').textContent = '프리셋 편집';
+    document.getElementById('inp-emoji').value = p.emoji;
+    document.getElementById('emoji-preview').textContent = p.emoji;
+    document.getElementById('inp-name').value = p.name;
+    document.getElementById('inp-mh').value = p.h;
+    document.getElementById('inp-mm').value = p.m;
+    document.getElementById('inp-ms').value = p.s;
+    document.getElementById('inp-cat').value = p.cat;
+    document.getElementById('inp-desc').value = p.desc || '';
+    showModal();
+    setTimeout(() => document.getElementById('inp-name').focus(), 200);
+  }
+
+  function savePreset() {
+    const emoji = document.getElementById('inp-emoji').value.trim() || '⏱';
+    const name = document.getElementById('inp-name').value.trim();
+    if (!name) { document.getElementById('inp-name').focus(); shakeInput('inp-name'); return; }
+    const h = parseInt(document.getElementById('inp-mh').value) || 0;
+    const m = parseInt(document.getElementById('inp-mm').value) || 0;
+    const s = parseInt(document.getElementById('inp-ms').value) || 0;
+    if (h + m + s === 0) { shakeInput('inp-mm'); showToast('시간을 1초 이상 설정해주세요'); return; }
+    const cat = document.getElementById('inp-cat').value;
+    const descRaw = document.getElementById('inp-desc').value.trim();
+    const desc = descRaw || makeTimeDesc(h, m, s);
+
+    const entry = { emoji, name, desc, cat, h, m, s, custom: true };
+
+    if (editingIdx === null) {
+      presets.push(entry);
+      showToast(`${emoji} ${name} 프리셋 추가됨`);
+    } else {
+      presets[editingIdx] = entry;
+      showToast(`${emoji} ${name} 프리셋 저장됨`);
+    }
+
+    savePresetsToStorage();
+    closeModal();
+    renderPresets();
+  }
+
+  function deletePreset(idx) {
+    const p = presets[idx];
+    if (!confirm(`"${p.name}" 프리셋을 삭제할까요?`)) return;
+    presets.splice(idx, 1);
+    savePresetsToStorage();
+    renderPresets();
+    showToast(`${p.name} 삭제됨`);
+  }
+
+  function confirmResetDefaults() {
+    if (!confirm('모든 프리셋을 기본값으로 초기화할까요?\n직접 추가한 프리셋도 모두 삭제됩니다.')) return;
+    presets = DEFAULT_PRESETS.map(p => ({ ...p }));
+    savePresetsToStorage();
+    renderPresets();
+    showToast('프리셋이 기본값으로 초기화됐습니다');
+  }
+
+  function shakeInput(id) {
+    const el = document.getElementById(id);
+    el.style.borderColor = 'var(--danger)';
+    setTimeout(() => el.style.borderColor = '', 1500);
+  }
+
+  /* ──────────── Modal ──────────── */
+  function showModal() { document.getElementById('modal-backdrop').classList.add('show'); }
+  function closeModal() { document.getElementById('modal-backdrop').classList.remove('show'); }
+  function handleBackdropClick(e) { if (e.target === e.currentTarget) closeModal(); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  /* ──────────── Timer logic ──────────── */
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function addTimer(preset = null) {
+    const id = nextId++;
+    const t = {
+      id,
+      label: preset ? preset.label : `타이머 ${id}`,
+      h: preset ? preset.h : 0,
+      m: preset ? preset.m : 5,
+      s: preset ? preset.s : 0,
+      totalSeconds: 0, remaining: 0,
+      state: 'idle', interval: null,
+    };
+    t.totalSeconds = t.h * 3600 + t.m * 60 + t.s;
+    t.remaining = t.totalSeconds;
+    timers.push(t);
+    renderTimers();
+    return id;
+  }
+
+  function removeTimer(id) {
+    const t = getTimer(id);
+    if (t?.interval) clearInterval(t.interval);
+    timers = timers.filter(x => x.id !== id);
+    renderTimers();
+  }
+
+  function getTimer(id) { return timers.find(x => x.id === id); }
+
+  function startTimer(id) {
+    const t = getTimer(id);
+    if (!t) return;
+    if (t.state === 'finished') { clearInterval(t.interval); t.remaining = t.totalSeconds; t.state = 'idle'; }
+    if (t.remaining <= 0) {
+      readInputs(t);
+      if (t.totalSeconds <= 0) { showToast('시간을 설정해주세요'); return; }
+      t.remaining = t.totalSeconds;
+    }
+    t.state = 'running';
+    clearInterval(t.interval);
+    t.interval = setInterval(() => tick(t.id), 1000);
+    updateCard(t.id);
+  }
+
+  function pauseTimer(id) {
+    const t = getTimer(id);
+    if (!t || t.state !== 'running') return;
+    clearInterval(t.interval);
+    t.state = 'paused';
+    updateCard(id);
+  }
+
+  function resetTimer(id) {
+    const t = getTimer(id);
+    if (!t) return;
+    clearInterval(t.interval);
+    readInputs(t);
+    t.remaining = t.totalSeconds;
+    t.state = 'idle';
+    updateCard(id);
+  }
+
+  function readInputs(t) {
+    const card = document.getElementById(`card-${t.id}`);
+    if (!card) return;
+    t.h = parseInt(card.querySelector('.inp-h').value) || 0;
+    t.m = parseInt(card.querySelector('.inp-m').value) || 0;
+    t.s = parseInt(card.querySelector('.inp-s').value) || 0;
+    t.totalSeconds = t.h * 3600 + t.m * 60 + t.s;
+  }
+
+  function tick(id) {
+    const t = getTimer(id);
+    if (!t) return;
+    t.remaining--;
+    if (t.remaining <= 0) {
+      t.remaining = 0;
+      clearInterval(t.interval);
+      t.state = 'finished';
+      playBeep(3);
+      showToast(`${t.label} 완료!`);
+      if (Notification.permission === 'granted') {
+        new Notification('타이머 완료', { body: `"${t.label}" 타이머가 끝났습니다.` });
+      }
+    }
+    updateCard(id);
+  }
+
+  function startAll()  { timers.forEach(t => { if (t.state !== 'running') startTimer(t.id); }); }
+  function pauseAll()  { timers.forEach(t => pauseTimer(t.id)); }
+  function resetAll()  { timers.forEach(t => resetTimer(t.id)); }
+
+  /* ──────────── Card render ──────────── */
+  function updateCard(id) {
+    const t = getTimer(id);
+    if (!t) return;
+    const card = document.getElementById(`card-${t.id}`);
+    if (!card) return;
+    const offset = CIRC * (1 - t.remaining / (t.totalSeconds || 1));
+    card.querySelector('.ring-progress').style.strokeDashoffset = offset;
+    card.querySelector('.time-display').textContent =
+      `${pad(Math.floor(t.remaining/3600))}:${pad(Math.floor((t.remaining%3600)/60))}:${pad(t.remaining%60)}`;
+    card.querySelector('.time-status').textContent =
+      t.state === 'running' ? '진행 중' : t.state === 'paused' ? '일시정지' : t.state === 'finished' ? '완료!' : '';
+    card.classList.toggle('running',  t.state === 'running');
+    card.classList.toggle('finished', t.state === 'finished');
+    card.querySelector('.start-btn').disabled = t.state === 'running';
+    card.querySelector('.pause-btn').disabled = t.state !== 'running';
+    const lock = t.state === 'running' || t.state === 'paused';
+    card.querySelectorAll('.time-field input').forEach(i => i.disabled = lock);
+  }
+
+  function renderTimers() {
+    const grid = document.getElementById('timers-grid');
+    const empty = document.getElementById('empty-state');
+    grid.querySelectorAll('.timer-card').forEach(el => el.remove());
+    empty.style.display = timers.length === 0 ? 'block' : 'none';
+
+    timers.forEach(t => {
+      const card = document.createElement('div');
+      card.className = 'timer-card';
+      card.id = `card-${t.id}`;
+      const offset = CIRC * (1 - (t.remaining / (t.totalSeconds || 1)));
+      card.innerHTML = `
+        <div class="finished-badge">완료!</div>
+        <div class="timer-header">
+          <input class="timer-label" type="text" value="${escHtml(t.label)}" maxlength="22"
+            onchange="getTimer(${t.id}).label=this.value" onblur="getTimer(${t.id}).label=this.value"/>
+          <button class="btn btn-sm btn-danger-ghost" onclick="removeTimer(${t.id})" title="삭제">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="ring-wrapper">
+          <svg width="136" height="136" viewBox="0 0 136 136">
+            <circle class="ring-bg"       cx="68" cy="68" r="${RADIUS}" stroke-width="8"/>
+            <circle class="ring-progress" cx="68" cy="68" r="${RADIUS}" stroke-width="8"
+              stroke-dasharray="${CIRC}" stroke-dashoffset="${offset}"/>
+          </svg>
+          <div class="ring-center">
+            <div class="time-display">${pad(Math.floor(t.remaining/3600))}:${pad(Math.floor((t.remaining%3600)/60))}:${pad(t.remaining%60)}</div>
+            <div class="time-status"></div>
+          </div>
+        </div>
+        <div class="input-row">
+          <div class="time-field"><label>시간</label><input class="inp-h" type="number" min="0" max="23" value="${t.h}" placeholder="00"></div>
+          <div class="time-field"><label>분</label><input class="inp-m" type="number" min="0" max="59" value="${t.m}" placeholder="00"></div>
+          <div class="time-field"><label>초</label><input class="inp-s" type="number" min="0" max="59" value="${t.s}" placeholder="00"></div>
+        </div>
+        <div class="action-row">
+          <button class="btn start-btn" onclick="startTimer(${t.id})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>시작
+          </button>
+          <button class="btn pause-btn" onclick="pauseTimer(${t.id})" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>일시정지
+          </button>
+          <button class="btn reset-btn" onclick="resetTimer(${t.id})">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1,4 1,10 7,10"/><path d="M3.51 15a9 9 0 1 0 .49-4.02"/></svg>초기화
+          </button>
+        </div>
+      `;
+      grid.insertBefore(card, empty);
+      updateCard(t.id);
+    });
+  }
+
+  function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ──────────── Init ──────────── */
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  renderPresets();
+  renderTimers();
+</script>
+</body>
+</html>
